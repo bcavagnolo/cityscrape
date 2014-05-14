@@ -72,4 +72,35 @@ function getSessionId(success) {
   });
 }
 
-getSessionId();
+function getDataPage(success) {
+
+  getSessionId(function (sessionId) {
+
+    var dataPageOptions = {
+      // NB: all of the query variables are in the url here because the service
+      // wants this non-standard &?appSession thing that node seems to munge
+      // up.
+      url: 'http://b2.caspio.com/dp.asp?AppKey=92721000j2d3c7i6g4c7a4c5i9e2' +
+        '&js=true&cbb=914&pathname=http://www.sfgate.com/webdb/homesales/&?' +
+        'appSession=' + sessionId
+    }
+
+    console.log('getting data page...');
+    request(dataPageOptions, function (error, response, body) {
+      if (error) {
+        throw new Error('Failed to get data page: ' + error);
+      }
+      if (response.statusCode !== 200) {
+        throw new Error('Expected 200 when getting data page but got ' +
+                        response.statusCode);
+      }
+      if (success) {
+        success(body);
+      } else {
+        console.log(body);
+      }
+    });
+  });
+}
+
+getDataPage();
