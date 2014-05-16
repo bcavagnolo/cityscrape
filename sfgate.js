@@ -78,6 +78,8 @@ function getSessionId(success) {
 }
 
 function htmlifyDataPage(rawPage) {
+  // NB: the pages come back obfuscated as javascript with some common tags
+  // split up, apparently to inhibit scraping?
   var headerPattern = 'document.write(';
   var header = rawPage.substring(0, headerPattern.length);
   var end = rawPage.length - 2; // truncate the ); on the end
@@ -137,17 +139,16 @@ function parseSales(rows, success) {
 }
 
 function scrapePropertySales(rawPage, success) {
-  htmlPage = htmlifyDataPage(rawPage);
-  $ = cheerio.load(htmlPage);
+  $ = cheerio.load(rawPage);
   var rows = $('table[name="cbTable"] tr');
   parseSales(rows, success);
 }
 
-function getDataPage(success) {
+function getRawHtml(success) {
 
   getSessionId(function (sessionId) {
 
-    var dataPageOptions = {
+    var rawHtmlOptions = {
       // NB: all of the query variables are in the url here because the service
       // wants this non-standard &?appSession thing that node seems to munge
       // up.
@@ -156,17 +157,23 @@ function getDataPage(success) {
         'appSession=' + sessionId
     }
 
-    winston.info('getting data page...');
-    request(dataPageOptions, function (error, response, body) {
+    winston.info('getting raw html page...');
+    request(rawHtmlOptions, function (error, response, rawHtml) {
       if (error) {
-        throw new Error('Failed to get data page: ' + error);
+        throw new Error('Failed to get html page: ' + error);
       }
       if (response.statusCode !== 200) {
         throw new Error('Expected 200 when getting data page but got ' +
                         response.statusCode);
       }
-      scrapePropertySales(body, success);
+      success && success(htmlifyDataPage(rawHtml));
     });
+  });
+}
+
+function getDataPage(success) {
+  getRawHtml(function(rawHtml) {
+    scrapePropertySales(rawHtml, success);
   });
 }
 
@@ -177,12 +184,25 @@ if (require.main === module) {
       flag: true,
       help: 'Do not spit out logging info to console'
     })
+    .option('html', {
+      abbr: 'H',
+      flag: true,
+      help: 'Dump scraped HTML instead of json'
+    })
     .parse();
   winston.cli();
   if (opts.quiet) {
       winston.remove(winston.transports.Console);
   }
-  getDataPage(function (sales) {
-    console.log(sales);
-  });
+  if (opts.html) {
+    var html = require("html");
+    getRawHtml(function (htmlPage) {
+      htmlPage = html.prettyPrint(htmlPage, {indent_size: 2});
+      console.log(htmlPage);
+    });
+  } else {
+    getDataPage(function (sales) {
+      console.log(sales);
+    });
+  }
 }
