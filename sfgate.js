@@ -3,6 +3,7 @@
 var request = require('request');
 var url = require('url');
 var cheerio = require('cheerio');
+var winston = require('winston');
 var $;
 
 sessionFormOptions = {
@@ -55,7 +56,7 @@ function _parseSessionId(rawUrl) {
 }
 
 function getSessionId(success) {
-  console.log('fetching session id...');
+  winston.info('fetching session id...');
   request(sessionFormOptions, function (error, response, body) {
     if (error) {
       throw new Error('Failed to get new session' + error);
@@ -71,7 +72,7 @@ function getSessionId(success) {
     if (success) {
       success(sessionId);
     } else {
-      console.log('got session id ' + sessionId);
+      winston.info('got session id ' + sessionId);
     }
   });
 }
@@ -113,7 +114,7 @@ function checkHeader(row) {
 function parseSales(rows, success) {
   checkHeader(rows[0]);
   dataRows = rows.slice(1);
-  console.log('found ' + dataRows.length + ' data rows');
+  winston.info('found ' + dataRows.length + ' data rows');
   sales = [];
   for (var i=0; i<dataRows.length; i++) {
     row = dataRows[i];
@@ -128,10 +129,10 @@ function parseSales(rows, success) {
     }
     sales.push(sale);
   }
+
+  winston.info('found sales.');
   if (success) {
     success(sales);
-  } else {
-    console.log(sales);
   }
 }
 
@@ -155,7 +156,7 @@ function getDataPage(success) {
         'appSession=' + sessionId
     }
 
-    console.log('getting data page...');
+    winston.info('getting data page...');
     request(dataPageOptions, function (error, response, body) {
       if (error) {
         throw new Error('Failed to get data page: ' + error);
@@ -169,5 +170,19 @@ function getDataPage(success) {
   });
 }
 
-if (require.main === module)
-  getDataPage();
+if (require.main === module) {
+  var opts = require("nomnom")
+    .option('quiet', {
+      abbr: 'q',
+      flag: true,
+      help: 'Do not spit out logging info to console'
+    })
+    .parse();
+  winston.cli();
+  if (opts.quiet) {
+      winston.remove(winston.transports.Console);
+  }
+  getDataPage(function (sales) {
+    console.log(sales);
+  });
+}
