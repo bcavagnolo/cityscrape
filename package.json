@@ -1,0 +1,12 @@
+{
+  "name": "scrapesf",
+  "version": "0.0.1",
+  "description": "Scrape useful San Francisco property data",
+  "main": "sfgate.js",
+  "author": "Brian Cavagnolo",
+  "dependencies": {
+    "request": "~2.34.0",
+    "cheerio": "~0.16.0",
+    "url": "~0.10.1"
+  }
+}
