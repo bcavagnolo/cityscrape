@@ -1,5 +1,7 @@
 var request = require('request');
 var url = require('url');
+var cheerio = require('cheerio');
+var $;
 
 sessionFormOptions = {
   url: 'http://b2.caspio.com/dp.asp',
@@ -72,6 +74,72 @@ function getSessionId(success) {
   });
 }
 
+function htmlifyDataPage(rawPage) {
+  var headerPattern = 'document.write(';
+  var header = rawPage.substring(0, headerPattern.length);
+  var end = rawPage.length - 2; // truncate the ); on the end
+
+  if(header !== headerPattern) {
+    throw new Error('Failed to find header in raw data page');
+  }
+  rawPage = rawPage.substring(headerPattern.length, end);
+  rawPage = rawPage.replace(/\\"/g, '"')
+    .replace(/\\n/g, '')
+    .replace(/scr"\+"ipt/g, 'script');
+  return rawPage;
+}
+
+var EXPECTED_HEADER = ['County', 'Address', 'City', 'ZIP', 'Sale date',
+                       'Sale price'];
+var OUTPUT_KEYS = ['county', 'address', 'city', 'zipcode', 'date', 'price'];
+
+function checkHeader(row) {
+  var expectedHeader = EXPECTED_HEADER.join();
+  var actualHeader = '';
+  var header = $(row).find('td a');
+  for (var i=0; i<header.length; i++) {
+    if (i !== 0) {
+      actualHeader += ',';
+    }
+    actualHeader += $(header[i]).html();
+  }
+  if (expectedHeader !== actualHeader) {
+    throw new Error('Got unexpected headers from data page: ' + header);
+  }
+}
+
+function parseSales(rows, success) {
+  checkHeader(rows[0]);
+  dataRows = rows.slice(1);
+  console.log('found ' + dataRows.length + ' data rows');
+  sales = [];
+  for (var i=0; i<dataRows.length; i++) {
+    row = dataRows[i];
+    cells = $(row).find('td');
+    if (cells.length < OUTPUT_KEYS.length) {
+      throw new Error('Expected at least ' + OUTPUT_KEYS.length +
+                      ' data cells. Found ' + cells.length + '.');
+    }
+    sale = {};
+    for (var j=0; j<OUTPUT_KEYS.length; j++) {
+      sale[OUTPUT_KEYS[j]] = $(cells[j]).html();
+    }
+    sales.push(sale);
+  }
+  if (success) {
+    success(sales);
+  } else {
+    console.log(sales);
+  }
+}
+
+function scrapePropertySales(rawPage, success) {
+  htmlPage = htmlifyDataPage(rawPage);
+  $ = cheerio.load(htmlPage);
+  var rows = $('table[name="cbTable"] tr');
+  parseSales(rows, success);
+}
+
 function getDataPage(success) {
 
   getSessionId(function (sessionId) {
@@ -94,11 +162,7 @@ function getDataPage(success) {
         throw new Error('Expected 200 when getting data page but got ' +
                         response.statusCode);
       }
-      if (success) {
-        success(body);
-      } else {
-        console.log(body);
-      }
+      scrapePropertySales(body, success);
     });
   });
 }
