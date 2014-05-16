@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 var request = require('request');
 var url = require('url');
 var cheerio = require('cheerio');
@@ -167,4 +169,5 @@ function getDataPage(success) {
   });
 }
 
-getDataPage();
+if (require.main === module)
+  getDataPage();
