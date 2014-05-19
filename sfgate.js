@@ -144,20 +144,26 @@ function scrapePropertySales(rawPage, success) {
   parseSales(rows, success);
 }
 
-function getRawHtml(success) {
+// page is an integer that starts at 1
+function getRawHtml(page, success) {
 
   getSessionId(function (sessionId) {
 
+    // NB: all of the query variables are in the url here because the service
+    // wants this non-standard &?appSession thing that node seems to munge
+    // up.
+    var pageUrl = 'http://b2.caspio.com/dp.asp?AppKey=92721000j2d3c7i6g4c7a4c5i9e2' +
+      '&js=true&cbb=914&pathname=http://www.sfgate.com/webdb/homesales/&?' +
+      'appSession=' + sessionId;
+    if (page && page != 1) {
+      pageUrl += '&RecordID=&PageID=2&PrevPageID=1&cpipage=' + page +
+        '&CPISortType=&CPIorderBy=';
+    }
     var rawHtmlOptions = {
-      // NB: all of the query variables are in the url here because the service
-      // wants this non-standard &?appSession thing that node seems to munge
-      // up.
-      url: 'http://b2.caspio.com/dp.asp?AppKey=92721000j2d3c7i6g4c7a4c5i9e2' +
-        '&js=true&cbb=914&pathname=http://www.sfgate.com/webdb/homesales/&?' +
-        'appSession=' + sessionId
+      url: pageUrl
     }
 
-    winston.info('getting raw html page...');
+    winston.info('getting raw html page ' + pageUrl);
     request(rawHtmlOptions, function (error, response, rawHtml) {
       if (error) {
         throw new Error('Failed to get html page: ' + error);
@@ -171,8 +177,8 @@ function getRawHtml(success) {
   });
 }
 
-function getDataPage(success) {
-  getRawHtml(function(rawHtml) {
+function getDataPage(page, success) {
+  getRawHtml(page, function(rawHtml) {
     scrapePropertySales(rawHtml, success);
   });
 }
@@ -189,6 +195,15 @@ if (require.main === module) {
       flag: true,
       help: 'Dump scraped HTML instead of json'
     })
+    .option('page', {
+      abbr: 'p',
+      help: 'Page number to fetch. Default is 1, the first page.',
+      default: 1,
+      callback: function(page) {
+        if (page != parseInt(page))
+          return "page must be an integer";
+      }
+    })
     .parse();
   winston.cli();
   if (opts.quiet) {
@@ -196,12 +211,12 @@ if (require.main === module) {
   }
   if (opts.html) {
     var html = require("html");
-    getRawHtml(function (htmlPage) {
+    getRawHtml(opts.page, function (htmlPage) {
       htmlPage = html.prettyPrint(htmlPage, {indent_size: 2});
       console.log(htmlPage);
     });
   } else {
-    getDataPage(function (sales) {
+    getDataPage(1, function (sales) {
       console.log(sales);
     });
   }
