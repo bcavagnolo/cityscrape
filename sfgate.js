@@ -11,97 +11,81 @@ sessionFormOptions = {
   method: 'POST',
   form: {
     AppKey: '92721000j2d3c7i6g4c7a4c5i9e2',
-    ComparisonType1_1: null,
+    ComparisonType1_1: '=',
     MatchNull1_1: 'N',
-    Value1_1: null,
-    ComparisonType2_1: null,
+    Value1_1: '',
+    ComparisonType2_1: '=',
     MatchNull2_1: 'N',
-    Value2_1: null,
-    ComparisonType3_1: null,
+    Value2_1: '',
+    ComparisonType3_1: '=',
     MatchNull3_1: 'N',
-    Value3_1: null,
+    Value3_1: '',
     ComparisonType4_1: 'LIKE',
     MatchNull4_1: 'N',
-    Value4_1: null,
+    Value4_1: '',
     FieldName1: 'County',
     Operator1: 'OR',
-    NumCriteriaDetails1: 1,
+    NumCriteriaDetails1: '1',
     FieldName2: 'City',
     Operator2: 'OR',
-    NumCriteriaDetails2: 1,
+    NumCriteriaDetails2: '1',
     FieldName3: 'Zip',
     Operator3: 'OR',
-    NumCriteriaDetails3: 1,
+    NumCriteriaDetails3: '1',
     FieldName4: 'Price_Range',
     Operator4: 'OR',
-    NumCriteriaDetails4: 1,
-    FieldName5: 'HTML+Block+1',
-    Operator5: null,
-    NumCriteriaDetails5: 1,
-    PageID: 2,
+    NumCriteriaDetails4: '1',
+    FieldName5: 'HTML Block 1',
+    Operator5: '',
+    NumCriteriaDetails5: '1',
+    PageID: '2',
     GlobalOperator: 'AND',
-    NumCriteria: 5,
-    Search: 1,
-    PrevPageID: 1,
-    pathname: 'http://www.sfgate.com/webdb/homesales/'
+    NumCriteria: '5',
+    Search: '1',
+    PrevPageID: '1'
+  },
+  headers: {
+    Cookie: 'cbParamList=; AppKey=92721000j2d3c7i6g4c7a4c5i9e2',
+    Origin: 'http://b2.caspio.com',
+    Referer: 'http://b2.caspio.com/dp.asp?AppKey=92721000j2d3c7i6g4c7a4c5i9e2',
+    'Content-Type': 'application/x-www-form-urlencoded'
   }
 }
 
-function _parseSessionId(rawUrl) {
-  parsedUrl = url.parse(rawUrl, true);
-  if(!parsedUrl.query.hasOwnProperty('appSession')) {
-    throw new Error('session URL does not have an appSession');
-  }
-  return parsedUrl.query['appSession'];
-}
+function getFirstPage(success) {
+  winston.info('fetching first page...');
 
-function getSessionId(success) {
-  winston.info('fetching session id...');
-  request(sessionFormOptions, function (error, response, body) {
+  request(sessionFormOptions, function(error, response, rawHtml) {
     if (error) {
-      throw new Error('Failed to get new session' + error);
+      throw new Error('Failed to fetch first page: ' + error);
     }
-    if (response.statusCode !== 302) {
-      throw new Error('Expected 302 when getting session but got ' +
+    if (response.statusCode !== 200) {
+      throw new Error('Expected 200 when getting first page but got ' +
                       response.statusCode);
     }
-    if (!response.headers.hasOwnProperty('location')) {
-      throw new Error('Session response has no location.');
-    }
-    sessionId = _parseSessionId(response.headers['location']);
-    if (success) {
-      success(sessionId);
-    } else {
-      winston.info('got session id ' + sessionId);
-    }
+    success && success(new SalesPage(rawHtml));
   });
 }
 
-function htmlifyDataPage(rawPage) {
-  // NB: the pages come back obfuscated as javascript with some common tags
-  // split up, apparently to inhibit scraping?
-  var headerPattern = 'document.write(';
-  var header = rawPage.substring(0, headerPattern.length);
-  var end = rawPage.length - 2; // truncate the ); on the end
+function SalesPage(rawHtml) {
 
-  if(header !== headerPattern) {
-    throw new Error('Failed to find header in raw data page');
-  }
-  rawPage = rawPage.substring(headerPattern.length, end);
-  rawPage = rawPage.replace(/\\"/g, '"')
-    .replace(/\\n/g, '')
-    .replace(/scr"\+"ipt/g, 'script');
-  return rawPage;
+  this.EXPECTED_HEADER = ['County', 'Address', 'City', 'ZIP', 'Sale date',
+                          'Sale price'];
+  this.OUTPUT_KEYS = ['county', 'address', 'city', 'zipcode', 'date', 'price'];
+
+  this.rawHtml = rawHtml;
+  $ = cheerio.load(this.rawHtml);
+  this.rows = $('table[name="cbTable"] tr');
+  this.header = this.rows[0];
+  this.checkHeader();
+  this.dataRows = this.rows.slice(1);
+  this.parseSales();
 }
 
-var EXPECTED_HEADER = ['County', 'Address', 'City', 'ZIP', 'Sale date',
-                       'Sale price'];
-var OUTPUT_KEYS = ['county', 'address', 'city', 'zipcode', 'date', 'price'];
-
-function checkHeader(row) {
-  var expectedHeader = EXPECTED_HEADER.join();
+SalesPage.prototype.checkHeader = function() {
+  var expectedHeader = this.EXPECTED_HEADER.join();
   var actualHeader = '';
-  var header = $(row).find('td a');
+  var header = $(this.header).find('td a');
   for (var i=0; i<header.length; i++) {
     if (i !== 0) {
       actualHeader += ',';
@@ -113,74 +97,24 @@ function checkHeader(row) {
   }
 }
 
-function parseSales(rows, success) {
-  checkHeader(rows[0]);
-  dataRows = rows.slice(1);
-  winston.info('found ' + dataRows.length + ' data rows');
-  sales = [];
-  for (var i=0; i<dataRows.length; i++) {
-    row = dataRows[i];
+SalesPage.prototype.parseSales = function() {
+  winston.info('found ' + this.dataRows.length + ' data rows');
+  this.sales = [];
+  for (var i=0; i<this.dataRows.length; i++) {
+    row = this.dataRows[i];
     cells = $(row).find('td');
-    if (cells.length < OUTPUT_KEYS.length) {
-      throw new Error('Expected at least ' + OUTPUT_KEYS.length +
+    if (cells.length < this.OUTPUT_KEYS.length) {
+      throw new Error('Expected at least ' + this.OUTPUT_KEYS.length +
                       ' data cells. Found ' + cells.length + '.');
     }
     sale = {};
-    for (var j=0; j<OUTPUT_KEYS.length; j++) {
-      sale[OUTPUT_KEYS[j]] = $(cells[j]).html();
+    for (var j=0; j<this.OUTPUT_KEYS.length; j++) {
+      sale[this.OUTPUT_KEYS[j]] = $(cells[j]).html();
     }
-    sales.push(sale);
+    this.sales.push(sale);
   }
 
   winston.info('found sales.');
-  if (success) {
-    success(sales);
-  }
-}
-
-function scrapePropertySales(rawPage, success) {
-  $ = cheerio.load(rawPage);
-  var rows = $('table[name="cbTable"] tr');
-  parseSales(rows, success);
-}
-
-// page is an integer that starts at 1
-function getRawHtml(page, success) {
-
-  getSessionId(function (sessionId) {
-
-    // NB: all of the query variables are in the url here because the service
-    // wants this non-standard &?appSession thing that node seems to munge
-    // up.
-    var pageUrl = 'http://b2.caspio.com/dp.asp?AppKey=92721000j2d3c7i6g4c7a4c5i9e2' +
-      '&js=true&cbb=914&pathname=http://www.sfgate.com/webdb/homesales/&?' +
-      'appSession=' + sessionId;
-    if (page && page != 1) {
-      pageUrl += '&RecordID=&PageID=2&PrevPageID=1&cpipage=' + page +
-        '&CPISortType=&CPIorderBy=';
-    }
-    var rawHtmlOptions = {
-      url: pageUrl
-    }
-
-    winston.info('getting raw html page ' + pageUrl);
-    request(rawHtmlOptions, function (error, response, rawHtml) {
-      if (error) {
-        throw new Error('Failed to get html page: ' + error);
-      }
-      if (response.statusCode !== 200) {
-        throw new Error('Expected 200 when getting data page but got ' +
-                        response.statusCode);
-      }
-      success && success(htmlifyDataPage(rawHtml));
-    });
-  });
-}
-
-function getDataPage(page, success) {
-  getRawHtml(page, function(rawHtml) {
-    scrapePropertySales(rawHtml, success);
-  });
 }
 
 if (require.main === module) {
@@ -211,13 +145,13 @@ if (require.main === module) {
   }
   if (opts.html) {
     var html = require("html");
-    getRawHtml(opts.page, function (htmlPage) {
-      htmlPage = html.prettyPrint(htmlPage, {indent_size: 2});
+    getFirstPage(function (page) {
+      htmlPage = html.prettyPrint(page.rawHtml, {indent_size: 2});
       console.log(htmlPage);
     });
   } else {
-    getDataPage(1, function (sales) {
-      console.log(sales);
+    getFirstPage(function (page) {
+      console.log(page.sales);
     });
   }
 }
