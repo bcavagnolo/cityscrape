@@ -52,18 +52,39 @@ sessionFormOptions = {
   }
 }
 
+function handlePage(error, response, rawHtml, success) {
+  if (error) {
+    throw new Error('Failed to fetch first page: ' + error);
+  }
+  if (response.statusCode !== 200) {
+    throw new Error('Expected 200 when getting first page but got ' +
+                    response.statusCode);
+  }
+  success && success(new SalesPage(rawHtml));
+}
+
 function getFirstPage(success) {
   winston.info('fetching first page...');
-
   request(sessionFormOptions, function(error, response, rawHtml) {
-    if (error) {
-      throw new Error('Failed to fetch first page: ' + error);
+    handlePage(error, response, rawHtml, success);
+  });
+}
+
+function getPage(pageNumber, success) {
+  getFirstPage(function(page) {
+    if (pageNumber === 1) {
+      success && success(page);
+      return;
     }
-    if (response.statusCode !== 200) {
-      throw new Error('Expected 200 when getting first page but got ' +
-                      response.statusCode);
+    desiredPage = page.linkTemplate.replace(/cpipage=\d+/,
+                                            'cpipage=' + pageNumber);
+    var generalPageOptions = {
+      url: 'http://b2.caspio.com/' + desiredPage,
+      Cookie: 'cbParamList=; AppKey=92721000j2d3c7i6g4c7a4c5i9e2'
     }
-    success && success(new SalesPage(rawHtml));
+    request(generalPageOptions, function(error, response, rawHtml) {
+      handlePage(error, response, rawHtml, success);
+    });
   });
 }
 
@@ -74,23 +95,24 @@ function SalesPage(rawHtml) {
   this.OUTPUT_KEYS = ['county', 'address', 'city', 'zipcode', 'date', 'price'];
 
   this.rawHtml = rawHtml;
-  $ = cheerio.load(this.rawHtml);
-  this.rows = $('table[name="cbTable"] tr');
+  this.$ = cheerio.load(this.rawHtml);
+  this.rows = this.$('table[name="cbTable"] tr');
   this.header = this.rows[0];
   this.checkHeader();
   this.dataRows = this.rows.slice(1);
   this.parseSales();
+  this.parseLinks();
 }
 
 SalesPage.prototype.checkHeader = function() {
   var expectedHeader = this.EXPECTED_HEADER.join();
   var actualHeader = '';
-  var header = $(this.header).find('td a');
+  var header = this.$(this.header).find('td a');
   for (var i=0; i<header.length; i++) {
     if (i !== 0) {
       actualHeader += ',';
     }
-    actualHeader += $(header[i]).html();
+    actualHeader += this.$(header[i]).html();
   }
   if (expectedHeader !== actualHeader) {
     throw new Error('Got unexpected headers from data page: ' + header);
@@ -102,19 +124,24 @@ SalesPage.prototype.parseSales = function() {
   this.sales = [];
   for (var i=0; i<this.dataRows.length; i++) {
     row = this.dataRows[i];
-    cells = $(row).find('td');
+    cells = this.$(row).find('td');
     if (cells.length < this.OUTPUT_KEYS.length) {
       throw new Error('Expected at least ' + this.OUTPUT_KEYS.length +
                       ' data cells. Found ' + cells.length + '.');
     }
     sale = {};
     for (var j=0; j<this.OUTPUT_KEYS.length; j++) {
-      sale[this.OUTPUT_KEYS[j]] = $(cells[j]).html();
+      sale[this.OUTPUT_KEYS[j]] = this.$(cells[j]).html();
     }
     this.sales.push(sale);
   }
 
   winston.info('found sales.');
+}
+
+SalesPage.prototype.parseLinks = function() {
+  var link = this.$('table.cbResultSetNavigationCell tr td a')[0];
+  this.linkTemplate = link.attribs.href;
 }
 
 if (require.main === module) {
@@ -145,12 +172,12 @@ if (require.main === module) {
   }
   if (opts.html) {
     var html = require("html");
-    getFirstPage(function (page) {
+    getPage(opts.page, function (page) {
       htmlPage = html.prettyPrint(page.rawHtml, {indent_size: 2});
       console.log(htmlPage);
     });
   } else {
-    getFirstPage(function (page) {
+    getPage(opts.page, function (page) {
       console.log(page.sales);
     });
   }
