@@ -133,6 +133,7 @@ SalesPage.prototype.parseSales = function() {
     for (var j=0; j<this.OUTPUT_KEYS.length; j++) {
       sale[this.OUTPUT_KEYS[j]] = this.$(cells[j]).html();
     }
+    this.parseHiddenData(cells[this.OUTPUT_KEYS.length], sale);
     this.sales.push(sale);
   }
 
@@ -142,6 +143,47 @@ SalesPage.prototype.parseSales = function() {
 SalesPage.prototype.parseLinks = function() {
   var link = this.$('table.cbResultSetNavigationCell tr td a')[0];
   this.linkTemplate = link.attribs.href;
+}
+
+SalesPage.prototype.parseHiddenData = function(hiddenCell, sale) {
+  var INPUT_FIELDS = ['Bedrooms', 'Square feet', 'Lot size'];
+  var OUTPUT_FIELDS = ['bedrooms', 'squareFeet', 'lotSize'];
+  var IGNORE_FIELDS = ['Sales price', 'Address', 'Sales date'];
+  var hidden = this.$(hiddenCell);
+  for (var i=0; i<OUTPUT_FIELDS.length; i++) {
+    sale[OUTPUT_FIELDS[i]] = null;
+  }
+  if (!hidden) {
+    winston.warn('Failed to find hidden data for ' + sale['address']);
+    return;
+  }
+  hiddenDivs = hidden.find('div[id^=icon] font');
+  if (!hiddenDivs || hiddenDivs.length != 1) {
+    winston.warn('Found ' + hiddenDivs.length + ' hidden divs for ' +
+                 sale['address'] + ' but only expected 1');
+  }
+  var kvs = this.$(hiddenDivs[0]).html().split('<br>');
+  for (var i=0; i<kvs.length; i++) {
+    var kv = kvs[i].trim();
+    if (kv.indexOf(':') === -1) {
+      winston.warn('Found hidden data without colon: ' + kv);
+      continue;
+    }
+    var parts = kv.split(':');
+    if (parts.length !== 2) {
+      winston.warn('Found hidden data too many parts: ' + kv);
+    }
+    var key = parts[0].trim();
+    var value = parts[1].trim();
+    if (IGNORE_FIELDS.indexOf(key) !== -1) {
+      continue;
+    }
+    if (INPUT_FIELDS.indexOf(key) === -1) {
+      winston.warn('Found unexpected hidden data field: ' + kv);
+      continue;
+    }
+    sale[OUTPUT_FIELDS[INPUT_FIELDS.indexOf(key)]] = value;
+  }
 }
 
 if (require.main === module) {
