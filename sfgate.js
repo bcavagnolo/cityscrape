@@ -134,6 +134,7 @@ SalesPage.prototype.parseSales = function() {
       sale[this.OUTPUT_KEYS[j]] = this.$(cells[j]).html();
     }
     this.parseHiddenData(cells[this.OUTPUT_KEYS.length], sale);
+    this.parseRecordId(cells[this.OUTPUT_KEYS.length + 1], sale);
     this.sales.push(sale);
   }
 
@@ -184,6 +185,27 @@ SalesPage.prototype.parseHiddenData = function(hiddenCell, sale) {
     }
     sale[OUTPUT_FIELDS[INPUT_FIELDS.indexOf(key)]] = value;
   }
+}
+
+SalesPage.prototype.parseRecordId = function(detailCell, sale) {
+  var detail = this.$(detailCell);
+  sale['recordId'] = null;
+  if (!detail) {
+    winston.warn('Failed to find detail cell for ' + sale['address']);
+    return;
+  }
+  var detailLink = this.$(detail).find('a');
+  if (!detailLink || detailLink.length != 1) {
+    winston.warn('Found ' + detailLink.length + ' detail links for ' +
+                 sale['address'] + ' but only expected 1');
+  }
+  detailLink = detailLink[0].attribs.href;
+  detailQuery = url.parse(detailLink, true).query;
+  if (!detailQuery.hasOwnProperty('RecordID')) {
+    winston.warn('Detail link does not contain a RecordID');
+    return;
+  }
+  sale['recordId'] = detailQuery['RecordID'];
 }
 
 if (require.main === module) {
