@@ -2,55 +2,57 @@ var request = require('request');
 var url = require('url');
 var cheerio = require('cheerio');
 var winston = require('winston');
-var $;
 
-sessionFormOptions = {
-  url: 'http://b2.caspio.com/dp.asp',
-  method: 'POST',
-  form: {
-    AppKey: '92721000j2d3c7i6g4c7a4c5i9e2',
-    ComparisonType1_1: '=',
-    MatchNull1_1: 'N',
-    Value1_1: '',
-    ComparisonType2_1: '=',
-    MatchNull2_1: 'N',
-    Value2_1: '',
-    ComparisonType3_1: '=',
-    MatchNull3_1: 'N',
-    Value3_1: '',
-    ComparisonType4_1: 'LIKE',
-    MatchNull4_1: 'N',
-    Value4_1: '',
-    FieldName1: 'County',
-    Operator1: 'OR',
-    NumCriteriaDetails1: '1',
-    FieldName2: 'City',
-    Operator2: 'OR',
-    NumCriteriaDetails2: '1',
-    FieldName3: 'Zip',
-    Operator3: 'OR',
-    NumCriteriaDetails3: '1',
-    FieldName4: 'Price_Range',
-    Operator4: 'OR',
-    NumCriteriaDetails4: '1',
-    FieldName5: 'HTML Block 1',
-    Operator5: '',
-    NumCriteriaDetails5: '1',
-    PageID: '2',
-    GlobalOperator: 'AND',
-    NumCriteria: '5',
-    Search: '1',
-    PrevPageID: '1'
-  },
-  headers: {
-    Cookie: 'cbParamList=; AppKey=92721000j2d3c7i6g4c7a4c5i9e2',
-    Origin: 'http://b2.caspio.com',
-    Referer: 'http://b2.caspio.com/dp.asp?AppKey=92721000j2d3c7i6g4c7a4c5i9e2',
-    'Content-Type': 'application/x-www-form-urlencoded'
+function PageScraper(options) {
+
+  this.SESSION_FORM_OPTIONS = {
+    url: 'http://b2.caspio.com/dp.asp',
+    method: 'POST',
+    form: {
+      AppKey: '92721000j2d3c7i6g4c7a4c5i9e2',
+      ComparisonType1_1: '=',
+      MatchNull1_1: 'N',
+      Value1_1: '',
+      ComparisonType2_1: '=',
+      MatchNull2_1: 'N',
+      Value2_1: '',
+      ComparisonType3_1: '=',
+      MatchNull3_1: 'N',
+      Value3_1: '',
+      ComparisonType4_1: 'LIKE',
+      MatchNull4_1: 'N',
+      Value4_1: '',
+      FieldName1: 'County',
+      Operator1: 'OR',
+      NumCriteriaDetails1: '1',
+      FieldName2: 'City',
+      Operator2: 'OR',
+      NumCriteriaDetails2: '1',
+      FieldName3: 'Zip',
+      Operator3: 'OR',
+      NumCriteriaDetails3: '1',
+      FieldName4: 'Price_Range',
+      Operator4: 'OR',
+      NumCriteriaDetails4: '1',
+      FieldName5: 'HTML Block 1',
+      Operator5: '',
+      NumCriteriaDetails5: '1',
+      PageID: '2',
+      GlobalOperator: 'AND',
+      NumCriteria: '5',
+      Search: '1',
+      PrevPageID: '1'
+    },
+    headers: {
+      Cookie: 'cbParamList=; AppKey=92721000j2d3c7i6g4c7a4c5i9e2',
+      Origin: 'http://b2.caspio.com',
+      Referer: 'http://b2.caspio.com/dp.asp?AppKey=92721000j2d3c7i6g4c7a4c5i9e2',
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
   }
 }
 
-function handlePage(error, response, rawHtml, success) {
+PageScraper.prototype.handlePage = function(error, response, rawHtml, success) {
   if (error) {
     throw new Error('Failed to fetch first page: ' + error);
   }
@@ -61,15 +63,19 @@ function handlePage(error, response, rawHtml, success) {
   success && success(new SalesPage(rawHtml));
 }
 
-function getFirstPage(success) {
+PageScraper.prototype.getFirstPage = function(success) {
+  var self = this;
+
   winston.info('fetching first page...');
-  request(sessionFormOptions, function(error, response, rawHtml) {
-    handlePage(error, response, rawHtml, success);
+  request(this.SESSION_FORM_OPTIONS, function(error, response, rawHtml) {
+    self.handlePage(error, response, rawHtml, success);
   });
 }
 
-var getPage = function(pageNumber, success) {
-  getFirstPage(function(page) {
+PageScraper.prototype.getPage = function(pageNumber, success) {
+  var self = this;
+
+  this.getFirstPage(function(page) {
     if (pageNumber === 1) {
       success && success(page);
       return;
@@ -82,7 +88,7 @@ var getPage = function(pageNumber, success) {
       Cookie: 'cbParamList=; AppKey=92721000j2d3c7i6g4c7a4c5i9e2'
     }
     request(generalPageOptions, function(error, response, rawHtml) {
-      handlePage(error, response, rawHtml, success);
+      self.handlePage(error, response, rawHtml, success);
     });
   });
 }
@@ -207,4 +213,4 @@ SalesPage.prototype.parseRecordId = function(detailCell, sale) {
   sale['recordId'] = detailQuery['RecordID'];
 }
 
-exports.getPage = getPage;
+exports.PageScraper = PageScraper;

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-var getPage = require('./salesPage').getPage;
+var PageScraper = require('./salesPage').PageScraper;
 var winston = require('winston');
 var async = require('async');
 
@@ -43,15 +43,17 @@ if (require.main === module) {
   if (opts.quiet) {
       winston.remove(winston.transports.Console);
   }
+
+  var scraper = new PageScraper({});
   if (opts.html) {
     var html = require("html");
-    getPage(opts.page, function (page) {
+    scraper.getPage(opts.page, function (page) {
       htmlPage = html.prettyPrint(page.rawHtml, {indent_size: 2});
       console.log(htmlPage);
     });
   } else {
     var pageQueue = async.queue(transformPage);
-    getPage(opts.page, function(page) {
+    scraper.getPage(opts.page, function(page) {
       pageQueue.push(page);
     });
   }
