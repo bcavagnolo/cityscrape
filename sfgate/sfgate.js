@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 var getPage = require('./salesPage').getPage;
 var winston = require('winston');
+var async = require('async');
 
-function transformPage(page) {
+function transformPage(page, success) {
   var INTEGER_FIELDS = ['bedrooms', 'squareFeet', 'lotSize', 'recordId'];
   for (var i=0; i<page.sales.length; i++) {
     sale = page.sales[i];
@@ -13,7 +14,7 @@ function transformPage(page) {
       sale[f] = parseInt(sale[f]);
     }
   }
-  console.log(page.sales);
+  success && success(page);
 }
 
 if (require.main === module) {
@@ -49,6 +50,9 @@ if (require.main === module) {
       console.log(htmlPage);
     });
   } else {
-    getPage(opts.page, transformPage);
+    var pageQueue = async.queue(transformPage);
+    getPage(opts.page, function(page) {
+      pageQueue.push(page);
+    });
   }
 }
