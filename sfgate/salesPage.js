@@ -5,6 +5,8 @@ var winston = require('winston');
 
 function PageScraper(options) {
 
+  this.callback = options.callback || function () {};
+
   this.SESSION_FORM_OPTIONS = {
     url: 'http://b2.caspio.com/dp.asp',
     method: 'POST',
@@ -52,7 +54,7 @@ function PageScraper(options) {
   }
 }
 
-PageScraper.prototype.handlePage = function(error, response, rawHtml, success) {
+PageScraper.prototype.readPage = function(error, response, rawHtml) {
   if (error) {
     throw new Error('Failed to fetch first page: ' + error);
   }
@@ -60,24 +62,26 @@ PageScraper.prototype.handlePage = function(error, response, rawHtml, success) {
     throw new Error('Expected 200 when getting first page but got ' +
                     response.statusCode);
   }
-  success && success(new SalesPage(rawHtml));
+  return new SalesPage(rawHtml);
 }
 
-PageScraper.prototype.getFirstPage = function(success) {
+PageScraper.prototype.getFirstPage = function(callback) {
   var self = this;
 
   winston.info('fetching first page...');
   request(this.SESSION_FORM_OPTIONS, function(error, response, rawHtml) {
-    self.handlePage(error, response, rawHtml, success);
+    page = self.readPage(error, response, rawHtml);
+    callback && callback(page);
   });
 }
 
-PageScraper.prototype.getPage = function(pageNumber, success) {
+PageScraper.prototype.getPage = function(pageNumber) {
   var self = this;
 
+  // We must always fetch the first page to learn the URL format
   this.getFirstPage(function(page) {
     if (pageNumber === 1) {
-      success && success(page);
+      self.callback(page);
       return;
     }
     winston.info('fetching page ' + pageNumber + '...');
@@ -88,7 +92,7 @@ PageScraper.prototype.getPage = function(pageNumber, success) {
       Cookie: 'cbParamList=; AppKey=92721000j2d3c7i6g4c7a4c5i9e2'
     }
     request(generalPageOptions, function(error, response, rawHtml) {
-      self.handlePage(error, response, rawHtml, success);
+      self.callback(self.readPage(error, response, rawHtml));
     });
   });
 }

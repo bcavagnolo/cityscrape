@@ -44,17 +44,20 @@ if (require.main === module) {
       winston.remove(winston.transports.Console);
   }
 
-  var scraper = new PageScraper({});
-  if (opts.html) {
-    var html = require("html");
-    scraper.getPage(opts.page, function (page) {
+  var pageQueue = async.queue(transformPage);
+  var pageHandler = function(page) {
+    if (opts.html) {
+      var html = require("html");
       htmlPage = html.prettyPrint(page.rawHtml, {indent_size: 2});
       console.log(htmlPage);
-    });
-  } else {
-    var pageQueue = async.queue(transformPage);
-    scraper.getPage(opts.page, function(page) {
+    } else {
       pageQueue.push(page);
-    });
+    }
   }
+
+  var scraperOptions = {
+    callback: pageHandler
+  }
+  var scraper = new PageScraper(scraperOptions);
+  scraper.getPage(opts.page);
 }
