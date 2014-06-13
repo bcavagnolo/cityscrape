@@ -3,13 +3,16 @@ var url = require('url');
 var cheerio = require('cheerio');
 var winston = require('winston');
 var async = require('async');
+var _ = require("underscore");
 
 function PageScraper(options) {
 
+  this.options = options;
   this.callback = options.callback || function () {};
-  this.pageNumbers = options.pageNumbers || null;
+  this.pageNumbers = options.pageNumbers || [];
   this.maxConcurrency = options.maxConcurrency || 4;
 
+  this.RECORDS_PER_PAGE = 25;
   this.SESSION_FORM_OPTIONS = {
     url: 'http://b2.caspio.com/dp.asp',
     method: 'POST',
@@ -100,9 +103,12 @@ PageScraper.prototype.run = function() {
   // We must always fetch the first page to learn the URL format
   this.getFirstPage(function(page) {
     var pageTasks = [];
+    var maxPage;
     var indexOfOne = self.pageNumbers.indexOf(1);
-    if (indexOfOne !== -1) {
+    if (indexOfOne !== -1 || !self.pageNumbers.length) {
       self.callback(page);
+    }
+    if (indexOfOne !== -1) {
       self.pageNumbers.splice(indexOfOne, 1);
       if (self.pageNumbers.length === 0) {
         return;
@@ -110,6 +116,8 @@ PageScraper.prototype.run = function() {
     }
     self.linkTemplate = page.linkTemplate;
 
+    maxPage = Math.ceil(page.recordCount/self.RECORDS_PER_PAGE);
+    self.pageNumbers = self.pageNumbers.length ? self.pageNumbers : _.range(2, maxPage);
     // Now launch em
     function makePageFunction(pageNumber, callback) {
       winston.info('creating page ' + pageNumber + ' task.');
@@ -139,6 +147,7 @@ function SalesPage(rawHtml) {
   this.dataRows = this.rows.slice(1);
   this.parseSales();
   this.parseLinks();
+  this.parseRecordCount();
 }
 
 SalesPage.prototype.checkHeader = function() {
@@ -240,6 +249,12 @@ SalesPage.prototype.parseRecordId = function(detailCell, sale) {
     return;
   }
   sale['recordId'] = detailQuery['RecordID'];
+}
+
+SalesPage.prototype.parseRecordCount = function() {
+  var regex = /<td colspan="3">Records \d+-\d+ of (\d+)<\/td>/;
+  var match = regex.exec(this.rawHtml);
+  this.recordCount = parseInt(match[1]);
 }
 
 exports.PageScraper = PageScraper;
