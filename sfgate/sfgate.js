@@ -56,8 +56,9 @@ if (require.main === module) {
   }
 
   var scraperOptions = {
-    callback: pageHandler
+    callback: pageHandler,
+    pageNumber: opts.page
   }
   var scraper = new PageScraper(scraperOptions);
-  scraper.getPage(opts.page);
+  scraper.run();
 }

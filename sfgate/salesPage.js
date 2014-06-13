@@ -6,6 +6,7 @@ var winston = require('winston');
 function PageScraper(options) {
 
   this.callback = options.callback || function () {};
+  this.pageNumber = options.pageNumber || 1;
 
   this.SESSION_FORM_OPTIONS = {
     url: 'http://b2.caspio.com/dp.asp',
@@ -95,6 +96,10 @@ PageScraper.prototype.getPage = function(pageNumber) {
       self.callback(self.readPage(error, response, rawHtml));
     });
   });
+}
+
+PageScraper.prototype.run = function() {
+  this.getPage(this.pageNumber);
 }
 
 function SalesPage(rawHtml) {
