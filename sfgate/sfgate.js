@@ -2,6 +2,7 @@
 var PageScraper = require('./salesPage').PageScraper;
 var winston = require('winston');
 var async = require('async');
+var _ = require("underscore");
 
 function transformPage(page, success) {
   var INTEGER_FIELDS = ['bedrooms', 'squareFeet', 'lotSize', 'recordId'];
@@ -17,6 +18,30 @@ function transformPage(page, success) {
   success && success(page);
 }
 
+function parsePageNumbers(rawPageNumbers) {
+  if (!rawPageNumbers) {
+    return null;
+  } else if (rawPageNumbers.match(/\d+\-\d+/)) {
+    var parts = rawPageNumbers.split('-');
+    var start = parseInt(parts[0]);
+    var end = parseInt(parts[1]);
+    if (start >= end) {
+      throw {
+        name: 'InvalidArgument',
+        message: 'start must be less than end'
+      }
+    }
+    return _.range(start, end);
+  } else if (rawPageNumbers.match(/\d+/)) {
+    return [parseInt(rawPageNumbers)];
+  } else {
+    throw {
+      name: 'InvalidArgument',
+      message: 'failed to parse page number range: ' + rawPageNumbers
+    }
+  }
+}
+
 if (require.main === module) {
   var opts = require("nomnom")
     .option('quiet', {
@@ -29,14 +54,11 @@ if (require.main === module) {
       flag: true,
       help: 'Dump scraped HTML instead of json'
     })
-    .option('page', {
+    .option('pages', {
       abbr: 'p',
-      help: 'Page number to fetch. Default is 1, the first page.',
-      default: 1,
-      callback: function(page) {
-        if (page != parseInt(page))
-          return "page must be an integer";
-      }
+      type: 'string',
+      help: 'Page numbers to fetch. Default is all. You can specify a single ' +
+        'page (e.g., 2) or a range of pages (e.g., 1-4).'
     })
     .parse();
   winston.cli();
@@ -44,6 +66,7 @@ if (require.main === module) {
       winston.remove(winston.transports.Console);
   }
 
+  var pageNumbers = parsePageNumbers(opts.pages);
   var pageQueue = async.queue(transformPage);
   var pageHandler = function(page) {
     if (opts.html) {
@@ -57,7 +80,7 @@ if (require.main === module) {
 
   var scraperOptions = {
     callback: pageHandler,
-    pageNumber: opts.page
+    pageNumbers: pageNumbers
   }
   var scraper = new PageScraper(scraperOptions);
   scraper.run();

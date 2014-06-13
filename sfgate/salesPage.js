@@ -2,11 +2,13 @@ var request = require('request');
 var url = require('url');
 var cheerio = require('cheerio');
 var winston = require('winston');
+var async = require('async');
 
 function PageScraper(options) {
 
   this.callback = options.callback || function () {};
-  this.pageNumber = options.pageNumber || 1;
+  this.pageNumbers = options.pageNumbers || null;
+  this.maxConcurrency = options.maxConcurrency || 4;
 
   this.SESSION_FORM_OPTIONS = {
     url: 'http://b2.caspio.com/dp.asp',
@@ -71,6 +73,7 @@ PageScraper.prototype.getFirstPage = function(callback) {
 
   winston.info('fetching first page...');
   request(this.SESSION_FORM_OPTIONS, function(error, response, rawHtml) {
+    winston.info('reading first page');
     page = self.readPage(error, response, rawHtml);
     callback && callback(page);
   });
@@ -78,28 +81,48 @@ PageScraper.prototype.getFirstPage = function(callback) {
 
 PageScraper.prototype.getPage = function(pageNumber) {
   var self = this;
-
-  // We must always fetch the first page to learn the URL format
-  this.getFirstPage(function(page) {
-    if (pageNumber === 1) {
-      self.callback(page);
-      return;
-    }
-    winston.info('fetching page ' + pageNumber + '...');
-    desiredPage = page.linkTemplate.replace(/cpipage=\d+/,
+  winston.info('fetching page ' + pageNumber + '.');
+  desiredPage = this.linkTemplate.replace(/cpipage=\d+/,
                                             'cpipage=' + pageNumber);
-    var generalPageOptions = {
-      url: 'http://b2.caspio.com/' + desiredPage,
-      Cookie: 'cbParamList=; AppKey=92721000j2d3c7i6g4c7a4c5i9e2'
-    }
-    request(generalPageOptions, function(error, response, rawHtml) {
-      self.callback(self.readPage(error, response, rawHtml));
-    });
+  var generalPageOptions = {
+    url: 'http://b2.caspio.com/' + desiredPage,
+    Cookie: 'cbParamList=; AppKey=92721000j2d3c7i6g4c7a4c5i9e2'
+  }
+  request(generalPageOptions, function(error, response, rawHtml) {
+    winston.info('reading page ' + pageNumber + '.');
+    self.callback(self.readPage(error, response, rawHtml));
   });
 }
 
 PageScraper.prototype.run = function() {
-  this.getPage(this.pageNumber);
+  var self = this;
+
+  // We must always fetch the first page to learn the URL format
+  this.getFirstPage(function(page) {
+    var pageTasks = [];
+    var indexOfOne = self.pageNumbers.indexOf(1);
+    if (indexOfOne !== -1) {
+      self.callback(page);
+      self.pageNumbers.splice(indexOfOne, 1);
+      if (self.pageNumbers.length === 0) {
+        return;
+      }
+    }
+    self.linkTemplate = page.linkTemplate;
+
+    // Now launch em
+    function makePageFunction(pageNumber, callback) {
+      winston.info('creating page ' + pageNumber + ' task.');
+      var pageFunction = function() {
+        self.getPage(pageNumber);
+      };
+      callback(null, pageFunction);
+    }
+    function launchPageFunctions(err, pageFunctions) {
+      async.parallelLimit(pageFunctions, self.maxConcurrency)
+    }
+    async.map(self.pageNumbers, makePageFunction, launchPageFunctions);
+  });
 }
 
 function SalesPage(rawHtml) {
@@ -134,7 +157,6 @@ SalesPage.prototype.checkHeader = function() {
 }
 
 SalesPage.prototype.parseSales = function() {
-  winston.info('found ' + this.dataRows.length + ' data rows');
   this.sales = [];
   for (var i=0; i<this.dataRows.length; i++) {
     row = this.dataRows[i];
@@ -151,8 +173,6 @@ SalesPage.prototype.parseSales = function() {
     this.parseRecordId(cells[this.OUTPUT_KEYS.length + 1], sale);
     this.sales.push(sale);
   }
-
-  winston.info('found sales.');
 }
 
 SalesPage.prototype.parseLinks = function() {
