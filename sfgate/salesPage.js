@@ -82,8 +82,9 @@ PageScraper.prototype.getFirstPage = function(callback) {
   });
 }
 
-PageScraper.prototype.getPage = function(pageNumber) {
+PageScraper.prototype.getPage = function(pageNumber, callback) {
   var self = this;
+  var callback = callback || self.callback
   winston.info('fetching page ' + pageNumber + '.');
   desiredPage = this.linkTemplate.replace(/cpipage=\d+/,
                                             'cpipage=' + pageNumber);
@@ -93,7 +94,9 @@ PageScraper.prototype.getPage = function(pageNumber) {
   }
   request(generalPageOptions, function(error, response, rawHtml) {
     winston.info('reading page ' + pageNumber + '.');
-    self.callback(self.readPage(error, response, rawHtml));
+    var page = self.readPage(error, response, rawHtml);
+    page.number = pageNumber;
+    callback(page);
   });
 }
 
@@ -105,6 +108,7 @@ PageScraper.prototype.run = function() {
     var pageTasks = [];
     var maxPage;
     var indexOfOne = self.pageNumbers.indexOf(1);
+    page.number = 1;
     if (indexOfOne !== -1 || !self.pageNumbers.length) {
       self.callback(page);
     }
@@ -121,13 +125,22 @@ PageScraper.prototype.run = function() {
     // Now launch em
     function makePageFunction(pageNumber, callback) {
       winston.info('creating page ' + pageNumber + ' task.');
-      var pageFunction = function() {
-        self.getPage(pageNumber);
+      var pageFunction = function(callback) {
+        self.getPage(pageNumber, function(page) {
+          // alert the user with the page and async
+          self.callback(page);
+          callback(null, page);
+        });
       };
       callback(null, pageFunction);
     }
     function launchPageFunctions(err, pageFunctions) {
-      async.parallelLimit(pageFunctions, self.maxConcurrency)
+      async.parallelLimit(pageFunctions, self.maxConcurrency,
+                          function(err, results) {
+                            if (err) {
+                              console.log(err);
+                            }
+                          });
     }
     async.map(self.pageNumbers, makePageFunction, launchPageFunctions);
   });

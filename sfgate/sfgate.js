@@ -4,7 +4,8 @@ var winston = require('winston');
 var async = require('async');
 var _ = require("underscore");
 
-function transformPage(page, success) {
+function transformPage(page, callback) {
+  winston.info('transforming page ' + page.number + '.');
   var INTEGER_FIELDS = ['bedrooms', 'squareFeet', 'lotSize', 'recordId'];
   for (var i=0; i<page.sales.length; i++) {
     sale = page.sales[i];
@@ -15,7 +16,7 @@ function transformPage(page, success) {
       sale[f] = parseInt(sale[f]);
     }
   }
-  success && success(page);
+  callback && callback();
 }
 
 function parsePageNumbers(rawPageNumbers) {
