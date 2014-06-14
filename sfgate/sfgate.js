@@ -61,6 +61,16 @@ if (require.main === module) {
       help: 'Page numbers to fetch. Default is all. You can specify a single ' +
         'page (e.g., 2) or a range of pages (e.g., 1-4).'
     })
+    .option('concurrency', {
+      abbr: 'c',
+      help: 'maximum concurrency to use. Default is the browser-like 4.',
+      default: 4,
+      callback: function(c) {
+        if (c != parseInt(c)) {
+          return "concurrencty must be an integer";
+        }
+      }
+    })
     .parse();
   winston.cli();
   if (opts.quiet) {
@@ -81,7 +91,8 @@ if (require.main === module) {
 
   var scraperOptions = {
     callback: pageHandler,
-    pageNumbers: pageNumbers
+    pageNumbers: pageNumbers,
+    maxConcurrency: opts.concurrency
   }
   var scraper = new PageScraper(scraperOptions);
   scraper.run();
