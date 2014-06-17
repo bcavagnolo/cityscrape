@@ -36,11 +36,55 @@ function transformPage(page, callback) {
 }
 
 // sales are taken from the sales queue and stored in the database.
-var salesQueue = async.queue(storeSale);
-function storeSale(sale, callback) {
-  winston.info('storing sale ' + sale.saleEvent.sourceId + ' from page ' +
-               sale.page.number + '.');
-  callback && callback();
+var salesQueue = async.queue(saveSale);
+var db = null;
+function connectToDatabase(dbUrl) {
+  db = require("mongojs").connect(dbUrl, ['properties', 'saleEvents']);
+}
+salesQueue.drain = function() {
+  db.close();
+};
+
+function saveSale(sale, callback) {
+  var prop = sale.property;
+  var saleEvent = sale.saleEvent;
+  var page = sale.page;
+
+  winston.info('storing sale ' + saleEvent.sourceId + ' from page ' +
+               page.number + '.');
+  db.properties.find({address: prop.address}, function(err, properties) {
+    if (err) {
+      winston.error('Failed to query for property at ' + prop.address + ': ' +
+                    err.message);
+      callback(err);
+    }
+    if (properties.length === 0) {
+      winston.info('creating new property at ' + prop.address + '.');
+      db.properties.save(prop, function(err, savedProperty) {
+        if (err) {
+          winston.error('Failed to save new property ' + prop.address + ': ' +
+                        err.message);
+          callback(err);
+        }
+        saveSaleEvent(saleEvent, savedProperty, callback);
+      });
+    } else {
+      saveSaleEvent(saleEvent, properties[0], callback);
+    }
+  });
+}
+
+function saveSaleEvent(saleEvent, property, callback) {
+  saleEvent.propertyId = property._id;
+  db.saleEvents.save(saleEvent, function(err) {
+    if (err) {
+      winston.error('Failed to save new sale ' + saleEvent.sourceId + ': ' +
+                    err.message);
+    } else {
+      winston.info('saved sale ' + saleEvent.sourceId + '.');
+    }
+    callback(err)
+  });
 }
 
 function parsePageNumbers(rawPageNumbers) {
@@ -95,6 +139,15 @@ if (require.main === module) {
         }
       }
     })
+    .option('database', {
+      abbr: 'd',
+      help: 'database URL (e.g., cityscrape).',
+      default: 'cityscrape',
+    })
+    .option('dropdb', {
+      flag: true,
+      help: 'DANGER ZONE: drop the database before proceeding.',
+    })
     .parse();
   winston.cli();
   if (opts.quiet) {
@@ -112,6 +165,11 @@ if (require.main === module) {
     }
   }
 
+  connectToDatabase(opts.database);
+  if (opts.dropdb) {
+    winston.info('Dropping database...');
+    db.dropDatabase();
+  }
   var scraperOptions = {
     callback: pageHandler,
     pageNumbers: pageNumbers,

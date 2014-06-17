@@ -11,6 +11,7 @@
     "winston": "~0.7.3",
     "nomnom": "~1.6.2",
     "html": "0.0.7",
-    "underscore": "1.6.0"
+    "underscore": "1.6.0",
+    "mongojs": "0.13.0"
   }
 }
