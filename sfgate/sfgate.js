@@ -3,6 +3,7 @@ var PageScraper = require('./salesPage').PageScraper;
 var winston = require('winston');
 var async = require('async');
 var _ = require("underscore");
+var mongojs = require("mongojs");
 
 // scraped pages go into the pageQueue. These are broken up into individual
 // sales events, transformed, and pushed into the salesQueue.
@@ -39,18 +40,15 @@ function transformPage(page, callback) {
 var salesQueue = async.queue(saveSale);
 var db = null;
 function connectToDatabase(dbUrl) {
-  db = require("mongojs").connect(dbUrl, ['properties', 'saleEvents']);
+  db = mongojs.connect(dbUrl, ['properties', 'saleEvents']);
 }
-salesQueue.drain = function() {
-  db.close();
-};
 
 function saveSale(sale, callback) {
   var prop = sale.property;
   var saleEvent = sale.saleEvent;
   var page = sale.page;
 
-  winston.info('storing sale ' + saleEvent.sourceId + ' from page ' +
+  winston.info('saving sale ' + saleEvent.sourceId + ' from page ' +
                page.number + '.');
   db.properties.find({address: prop.address}, function(err, properties) {
     if (err) {
@@ -75,15 +73,30 @@ function saveSale(sale, callback) {
 }
 
 function saveSaleEvent(saleEvent, property, callback) {
+  var saleFields = {
+    propertyId: mongojs.ObjectId(property._id),
+    price: saleEvent.price,
+    date: saleEvent.date
+  };
   saleEvent.propertyId = property._id;
-  db.saleEvents.save(saleEvent, function(err) {
+  db.saleEvents.find(saleFields, function(err, sales) {
     if (err) {
-      winston.error('Failed to save new sale ' + saleEvent.sourceId + ': ' +
-                    err.message);
+      winston.error('Failed to query for existing sales: ' + err.message);
+      callback(err);
+    } else if (sales.length === 0) {
+      db.saleEvents.save(saleEvent, function(err) {
+        if (err) {
+          winston.error('Failed to save new sale ' + saleEvent.sourceId + ': ' +
+                        err.message);
+        } else {
+          winston.info('saved sale ' + saleEvent.sourceId + '.');
+        }
+        callback(err);
+      });
     } else {
-      winston.info('saved sale ' + saleEvent.sourceId + '.');
+      winston.info('sale ' + saleEvent.sourceId + ' already in db.');
+      callback(err);
     }
-    callback(err)
   });
 }
 
