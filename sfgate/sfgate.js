@@ -11,16 +11,26 @@ var pageQueue = async.queue(transformPage);
 function transformPage(page, callback) {
   winston.info('transforming page ' + page.number + '.');
   var INTEGER_FIELDS = ['bedrooms', 'squareFeet', 'lotSize', 'recordId'];
+  var saleEvent;
+  var property;
   for (var i=0; i<page.sales.length; i++) {
     sale = page.sales[i];
-    sale['date'] = new Date(sale['date']);
-    sale['price'] = parseFloat(sale['price'].replace(/[\$,]/g, ''));
-    for (var j=0; j<INTEGER_FIELDS.length; j++) {
-      var f = INTEGER_FIELDS[j];
-      sale[f] = parseInt(sale[f]);
-    }
-    sale.pageNumber = page.number;
-    salesQueue.push(sale);
+    saleEvent = new Object();
+    property = new Object();
+
+    saleEvent.date = d=new Date(sale.date).toISOString().split('T')[0]
+    saleEvent.price = parseFloat(sale.price.replace(/[\$,]/g, ''));
+    saleEvent.source = 'sfgate';
+    saleEvent.sourceId = parseInt(sale.recordId);
+
+    property.address = sale.address;
+    property.city = sale.city;
+    property.postalCode = sale.zipcode;
+    property.bedrooms = parseInt(sale.bedrooms);
+    property.residentialArea = parseInt(sale.squareFeet);
+    property.parcelArea = parseInt(sale.lotSize);
+
+    salesQueue.push({property: property, saleEvent: saleEvent, page: page});
   }
   callback && callback();
 }
@@ -28,8 +38,8 @@ function transformPage(page, callback) {
 // sales are taken from the sales queue and stored in the database.
 var salesQueue = async.queue(storeSale);
 function storeSale(sale, callback) {
-  winston.info('storing sale ' + sale.recordId + ' from page ' +
-               sale.pageNumber + '.');
+  winston.info('storing sale ' + sale.saleEvent.sourceId + ' from page ' +
+               sale.page.number + '.');
   callback && callback();
 }
 
