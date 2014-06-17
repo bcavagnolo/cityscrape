@@ -4,6 +4,10 @@ var winston = require('winston');
 var async = require('async');
 var _ = require("underscore");
 
+// scraped pages go into the pageQueue. These are broken up into individual
+// sales events, transformed, and pushed into the salesQueue.
+var pageQueue = async.queue(transformPage);
+
 function transformPage(page, callback) {
   winston.info('transforming page ' + page.number + '.');
   var INTEGER_FIELDS = ['bedrooms', 'squareFeet', 'lotSize', 'recordId'];
@@ -15,7 +19,17 @@ function transformPage(page, callback) {
       var f = INTEGER_FIELDS[j];
       sale[f] = parseInt(sale[f]);
     }
+    sale.pageNumber = page.number;
+    salesQueue.push(sale);
   }
+  callback && callback();
+}
+
+// sales are taken from the sales queue and stored in the database.
+var salesQueue = async.queue(storeSale);
+function storeSale(sale, callback) {
+  winston.info('storing sale ' + sale.recordId + ' from page ' +
+               sale.pageNumber + '.');
   callback && callback();
 }
 
@@ -78,7 +92,6 @@ if (require.main === module) {
   }
 
   var pageNumbers = parsePageNumbers(opts.pages);
-  var pageQueue = async.queue(transformPage);
   var pageHandler = function(page) {
     if (opts.html) {
       var html = require("html");
