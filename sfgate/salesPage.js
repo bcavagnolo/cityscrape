@@ -121,7 +121,7 @@ PageScraper.prototype.run = function() {
     self.linkTemplate = page.linkTemplate;
 
     maxPage = Math.ceil(page.recordCount/self.RECORDS_PER_PAGE);
-    self.pageNumbers = self.pageNumbers.length ? self.pageNumbers : _.range(2, maxPage);
+    self.pageNumbers = self.pageNumbers.length ? self.pageNumbers : _.range(2, maxPage + 1);
     // Now launch em
     function makePageFunction(pageNumber, callback) {
       winston.info('creating page ' + pageNumber + ' task.');

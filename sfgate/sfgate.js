@@ -113,7 +113,7 @@ function parsePageNumbers(rawPageNumbers) {
         message: 'start must be less than end'
       }
     }
-    return _.range(start, end);
+    return _.range(start, end + 1);
   } else if (rawPageNumbers.match(/\d+/)) {
     return [parseInt(rawPageNumbers)];
   } else {
