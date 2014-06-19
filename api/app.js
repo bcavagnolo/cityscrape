@@ -1,5 +1,7 @@
 var express = require('express');
 var mongojs = require('mongojs');
+var compression = require('compression');
+var morgan  = require('morgan');
 
 var HttpError = function(message, options) {
   Error.call(this);
@@ -12,6 +14,9 @@ module.exports = function(config) {
 
   var app = express();
   var db = mongojs.connect(config.db, ['properties', 'saleEvents']);
+
+  app.use(morgan());
+  app.use(compression());
 
   app.param('apiKey', function(req, res, next, apiKey) {
     if (apiKey != config.secret) {
