@@ -3,6 +3,7 @@ var mongojs = require('mongojs');
 var compression = require('compression');
 var morgan  = require('morgan');
 var winston = require('winston');
+var swagger = require("./swagger")();
 
 var HttpError = function(message, options) {
   Error.call(this);
@@ -61,6 +62,8 @@ module.exports = function(config) {
       res.send(sales);
     });
   });
+
+  app.use('/api-docs', swagger);
 
   app.use(function (err, req, res, next) {
     err.status = err.status || 500;
