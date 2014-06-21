@@ -19,6 +19,7 @@
     "supertest": "0.13.0",
     "should": "4.0.4",
     "morgan": "1.1.1",
-    "compression": "1.0.7"
+    "compression": "1.0.7",
+    "moment": "2.7.0"
   }
 }

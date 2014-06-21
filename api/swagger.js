@@ -52,6 +52,27 @@ module.exports = function() {
                 description: 'maximum number of sales to retrieve',
                 type: 'string',
                 paramType: 'query'
+              },
+              {
+                name: 'startDate',
+                description: 'only retrieve sales on or after this date',
+                type: 'string',
+                format: 'date',
+                paramType: 'query'
+              },
+              {
+                name: 'endDate',
+                description: 'only retrieve sales on or before this date. Date must be of the format YYYY-MM-DD',
+                type: 'string',
+                format: 'date',
+                paramType: 'query'
+              },
+              {
+                name: 'startDate',
+                description: 'only retrieve sales on or after this date. Date must be of the format YYYY-MM-DD',
+                type: 'string',
+                format: 'date',
+                paramType: 'query'
               }
             ],
             responseMessages: [
