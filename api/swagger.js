@@ -37,7 +37,7 @@ module.exports = function() {
             method: 'GET',
             notes: 'The home sales are gathered from http://www.sfgate.com/webdb/homesales.',
             summary: 'Retrieve a list of home sales',
-            type: 'Order',
+            type: 'sale',
             nickname: 'getSales',
             parameters: [
               {
