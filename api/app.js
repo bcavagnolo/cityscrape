@@ -5,6 +5,7 @@ var morgan  = require('morgan');
 var winston = require('winston');
 var swagger = require('./swagger')();
 var moment = require('moment');
+var url = require('url');
 
 var HttpError = function(message, options) {
   Error.call(this);
@@ -33,19 +34,28 @@ module.exports = function(config) {
     return next();
   });
 
+  var nonNegativeIntParser = function(paramName, defaultValue) {
+    defaultValue = defaultValue || 0;
+
+    return function(req, res, next) {
+      if (!req.query.hasOwnProperty(paramName)) {
+        req.query[paramName] = defaultValue;
+        return next();
+      }
+      req.query[paramName] = parseInt(req.query[paramName]);
+      if (isNaN(req.query[paramName]) || req.query[paramName] < 0) {
+        return next(new HttpError(paramName + ' must be a positive integer',
+                                  {status: 400}));
+      }
+      next();
+    };
+  };
+
   // handle limit parameter
-  app.use(function(req, res, next) {
-    if (!req.query.hasOwnProperty('limit')) {
-      req.query.limit = DEFAULTS.LIMIT;
-      return next();
-    }
-    req.query.limit = parseInt(req.query.limit);
-    if (req.query.limit === NaN || req.query.limit < 0) {
-      return next(new HttpError('limit must be a positive integer',
-                                {status: 400}));
-    }
-    next();
-  });
+  app.use(nonNegativeIntParser('limit', DEFAULTS.LIMIT));
+
+  // handle offset parameter
+  app.use(nonNegativeIntParser('offset'));
 
   // handle date parameters
   var parseDate = function(paramName, req, res, next) {
@@ -79,10 +89,56 @@ module.exports = function(config) {
     res.send('Welcome to the cityscrape API.');
   });
 
+  var clone = function(obj) {
+    if (null == obj || "object" != typeof obj) {
+      return obj;
+    }
+    var copy = obj.constructor();
+    for (var attr in obj) {
+      if (obj.hasOwnProperty(attr)) {
+        copy[attr] = obj[attr];
+      }
+    }
+    return copy;
+  }
+
+  var getUrlParts = function(req) {
+    var parts = url.parse(req.originalUrl, true);
+    parts.query.offset = parseInt(parts.query.offset) || 0;
+    parts.query.limit = parseInt(parts.query.limit) || DEFAULTS.LIMIT;
+
+    return {
+      protocol: req.protocol,
+      host: req.get('host'),
+      pathname: parts.pathname,
+      query: clone(parts.query)
+    };
+  };
+
+  var calculateNextLink = function(req, count) {
+    var parts = getUrlParts(req);
+    var remaining = count - parts.query.offset;
+    if (remaining <= parts.query.limit) {
+      return null;
+    }
+    parts.query.offset += parts.query.limit;
+    return url.format(parts);
+  };
+
+  var calculatePreviousLink = function(req) {
+    var parts = getUrlParts(req);
+    if (!parts.query.offset) {
+      return null;
+    }
+    parts.query.offset -= parts.query.limit;
+    if (parts.query.offset <= 0) {
+      delete parts.query.offset;
+    }
+    return url.format(parts);
+  };
+
   app.get('/api/:apiKey/sales', function(req, res, next) {
-    var operators = [
-      {$project: {date: 1, price: 1, id: "$_id", _id: 0}}
-    ];
+    var operators = [];
 
     if (req.query.startDate && req.query.endDate) {
       operators.push({$match: {date: {$gte: req.query.startDate, $lte: req.query.endDate}}});
@@ -91,15 +147,36 @@ module.exports = function(config) {
     } else if (req.query.endDate) {
       operators.push({$match: {date: {$lte: req.query.endDate}}});
     }
+    operators.push({$group: {_id: null, count: {$sum: 1}}});
 
-    operators.push({$sort: {date: -1}});
-    operators.push({$limit: req.query.limit});
-
-    db.saleEvents.aggregate(operators, function(err, sales) {
+    // first get the record count
+    db.saleEvents.aggregate(operators, function(err, count) {
       if (err) {
         return next(err);
       }
-      res.send(sales);
+
+      // ...then get the data
+      operators.pop();
+      operators.push({$project: {date: 1, price: 1, id: "$_id", _id: 0}});
+      operators.push({$sort: {date: -1}});
+      operators.push({$skip: req.query.offset});
+      operators.push({$limit: req.query.limit});
+
+      var count = count[0].count;
+      var next = calculateNextLink(req, count);
+      var previous = calculatePreviousLink(req);
+
+      db.saleEvents.aggregate(operators, function(err, sales) {
+        if (err) {
+          return next(err);
+        }
+        res.send({
+          count: count,
+          next: next,
+          previous: previous,
+          results: sales
+        });
+      });
     });
   });
 
